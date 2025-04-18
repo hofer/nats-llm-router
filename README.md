@@ -7,9 +7,9 @@ forwarded to the corresponding LLM.
 > This tool is very much work in progress. Expect almost daily breaking changes...
 
 
-Run the following command to start a Ollama proxy:
+Run the following command to start an Ollama proxy:
 ```bash
-./nats-llm proxy ollama --url=nats://localhost:4222"
+./nats-llm proxy ollama --url="nats://localhost:4222"
 ```
 
 
