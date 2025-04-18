@@ -24,7 +24,10 @@ func (n *NatsOllamaLLM) Chat(ctx context.Context, req *api.ChatRequest) (api.Cha
 		return api.ChatResponse{}, err
 	}
 
-	msg, err := n.client.Request("ollama.chat", jsonStr, 420*time.Second)
+	deadline, _ := ctx.Deadline()
+	remainingDuration := time.Until(deadline)
+
+	msg, err := n.client.Request("ollama.chat", jsonStr, remainingDuration)
 	if err != nil {
 		return api.ChatResponse{}, err
 	}
@@ -45,7 +48,10 @@ func (n *NatsOllamaLLM) Embed(ctx context.Context, req *api.EmbedRequest) (api.E
 		return api.EmbedResponse{}, err
 	}
 
-	msg, err := n.client.Request("ollama.embed", jsonStr, 60*time.Second)
+	deadline, _ := ctx.Deadline()
+	remainingDuration := time.Until(deadline)
+
+	msg, err := n.client.Request("ollama.embed", jsonStr, remainingDuration)
 	if err != nil {
 		return api.EmbedResponse{}, err
 	}
