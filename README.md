@@ -1,8 +1,21 @@
-# Nats to LLM router
+# 🏁 NATS to LLM proxy/router
 
-This component is a Nats Service listening to messages and forwards requests to a LLM (Ollama, Gemini).
+This cli tool makes Ollama or Gemini LLMs accessible via MATS microservices. Requests sent to this NATS microservice are
+forwarded to the corresponding LLM.
 
-Use the following command to send messages to this service:
+> [!WARNING]
+> This tool is very much work in progress. Expect almost daily breaking changes...
+
+
+Run the following command to start a Ollama proxy:
+```bash
+./nats-llm proxy ollama --url=nats://localhost:4222"
+```
+
+
+## Testing
+
+Use the following command to manually send messages to this service:
 ```
 # Generate Text
 nats req --reply-timeout=10s ollama.generate '{"model": "gemma2:2b", "prompt": "What is atorvastatin? Respond in one sentence."}'

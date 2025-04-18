@@ -1,19 +1,7 @@
 package main
 
-import (
-	"github.com/nats-io/nats.go"
-	"runtime"
-)
+import "github.com/hofer/nats-llm/cmd"
 
-
-
-// main
 func main() {
-	const natsTailscale = "nats://100.93.123.116:4222"
-	nc, _ := nats.Connect(natsTailscale)
-
-	natsOllamaProxy := NewNatsOllamaProxy()
-	natsOllamaProxy.Start(nc)
-
-	runtime.Goexit()
+	cmd.Execute()
 }

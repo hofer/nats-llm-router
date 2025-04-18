@@ -1,16 +1,30 @@
-package main
+package proxy
 
 import (
-	"github.com/ollama/ollama/api"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/micro"
-	log "github.com/sirupsen/logrus"
 	"context"
 	"encoding/json"
-	"github.com/charmbracelet/huh/spinner"
-	"strings"
 	"fmt"
+	"github.com/charmbracelet/huh/spinner"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/micro"
+	"github.com/ollama/ollama/api"
+	log "github.com/sirupsen/logrus"
+	"runtime"
+	"strings"
 )
+
+func StartOllamaProxy(natsUrl string, ollamaUrl string) error {
+	nc, err := nats.Connect(natsUrl)
+	if err != nil {
+		return err
+	}
+
+	natsOllamaProxy := NewNatsOllamaProxy()
+	natsOllamaProxy.Start(nc)
+
+	runtime.Goexit()
+	return nil
+}
 
 type NatsOllamaProxy struct {
 	client *api.Client
