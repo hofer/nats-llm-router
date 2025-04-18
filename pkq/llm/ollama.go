@@ -1,4 +1,4 @@
-package proxy
+package llm
 
 import (
 	"context"
@@ -36,4 +36,25 @@ func (n *NatsOllamaLLM) Chat(ctx context.Context, req *api.ChatRequest) (api.Cha
 	}
 
 	return chatResponse, nil
+}
+
+func (n *NatsOllamaLLM) Embed(ctx context.Context, req *api.EmbedRequest) (api.EmbedResponse, error) {
+
+	jsonStr, err := json.Marshal(req)
+	if err != nil {
+		return api.EmbedResponse{}, err
+	}
+
+	msg, err := n.client.Request("ollama.embed", jsonStr, 60*time.Second)
+	if err != nil {
+		return api.EmbedResponse{}, err
+	}
+
+	var embedResponse api.EmbedResponse
+	err = json.Unmarshal(msg.Data, &embedResponse)
+	if err != nil {
+		return api.EmbedResponse{}, err
+	}
+
+	return embedResponse, nil
 }
