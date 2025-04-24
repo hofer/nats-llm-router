@@ -92,8 +92,6 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	nc.ConnectedAddr()
 }
 
 func (n *NatsOllamaProxy) generateHandler(req micro.Request) {

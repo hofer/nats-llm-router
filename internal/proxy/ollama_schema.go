@@ -6,12 +6,12 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
-type OllamaProxySchema struct {
+type NatsLlmProxySchema struct {
 	Request  string `json:"request"`
 	Response string `json:"response"`
 }
 
-func schema(request any, response any) (*OllamaProxySchema, error) {
+func schema(request any, response any) (*NatsLlmProxySchema, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true}
 	reqSchema, err := reflector.Reflect(request).MarshalJSON()
 	if err != nil {
@@ -22,7 +22,7 @@ func schema(request any, response any) (*OllamaProxySchema, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OllamaProxySchema{
+	return &NatsLlmProxySchema{
 		Request:  string(reqSchema),
 		Response: string(resSchema),
 	}, nil

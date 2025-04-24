@@ -3,18 +3,88 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"os"
+	"encoding/json"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/micro"
+	"runtime"
 )
 
-func gemini() {
+func StartNatsGeminiProxy(natsUrl string, ollamaUrl string) error {
+	nc, err := nats.Connect(natsUrl)
+	if err != nil {
+		return err
+	}
+
+	natsGeminiProxy := NewNatsGeminiProxy()
+	natsGeminiProxy.Start(nc)
+
+	runtime.Goexit()
+	return nil
+}
+
+type NatsGeminiProxy struct {
+	client *genai.Client
+}
+
+func NewNatsGeminiProxy() *NatsGeminiProxy {
+	return &NatsGeminiProxy{}
+}
+
+func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
 	if err != nil {
 		log.Fatal(err)
+	}
+	//defer client.Close()
+	n.client = client
+
+	srv, err := micro.AddService(nc, micro.Config{
+		Name:        "NatsGemini",
+		Version:     "0.0.1",
+		Description: "Nats microservice acting as a proxy for Gemini.",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	//defer srv.Stop()
+
+	root := srv.AddGroup("gemini")
+
+
+	// Chat
+	chatSchema, err := GetGeminiSchemaChat()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = root.AddEndpoint("chat", micro.HandlerFunc(n.chatHandler), micro.WithEndpointMetadata(map[string]string{
+		"schema": chatSchema,
+	}))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
+
+	var reqData GeminiChatRequest
+	err := json.Unmarshal(req.Data(), &reqData)
+	if err != nil {
+		req.Error("400", err.Error(), nil)
+		return
+	}
+
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	if err != nil {
+		log.Error(err)
+		req.Error("500", err.Error(), nil)
+		return
 	}
 	defer client.Close()
 	//
@@ -43,7 +113,7 @@ func gemini() {
 	//		}},
 	//	}
 
-	model := client.GenerativeModel("gemini-1.5-pro-latest")
+	model := client.GenerativeModel(reqData.Model) // "gemini-1.5-pro-latest"
 
 	//	// Before initiating a conversation, we tell the model which tools it has
 	//	// at its disposal.
@@ -62,16 +132,15 @@ func gemini() {
 	//    the tool for the model's query.
 	// 4. The model provides its text answer in response to this message.
 	session := model.StartChat()
+	//session.History = reqData.History
 
-	res, err := session.SendMessage(ctx, genai.Text("Who is the current president of the USA?"))
-	//res, err := session.SendMessage(ctx, genai.Text("Which theaters in Mountain View show Barbie movie?"))
+	res, err := session.SendMessage(ctx, genai.Text(reqData.Text))
 	if err != nil {
-		log.Fatalf("session.SendMessage: %v", err)
+		log.Error("session.SendMessage: %v", err)
+		req.Error("500", err.Error(), nil)
+		return
 	}
 
-	printResponse(res)
-
-	//
 	//	part := res.Candidates[0].Content.Parts[0]
 	//	funcall, ok := part.(genai.FunctionCall)
 	//	if !ok || funcall.Name != "find_theaters" {
@@ -94,15 +163,38 @@ func gemini() {
 	//		log.Fatal(err)
 	//	}
 	//	printResponse(res)
+
+	resData := GeminiChatResponse{
+		Response: getResponseText(res),
+		//History = session.History
+	}
+
+	responseData, err := json.Marshal(resData)
+	if err != nil {
+		log.Error("Error marshalling response:", err)
+		req.Error("500", err.Error(), nil)
+		return
+	}
+	err = req.Respond(responseData)
 }
 
-func printResponse(resp *genai.GenerateContentResponse) {
+func getResponseText(resp *genai.GenerateContentResponse) string{
+	response := ""
 	for _, cand := range resp.Candidates {
 		if cand.Content != nil {
 			for _, part := range cand.Content.Parts {
-				fmt.Println(part)
+				response += fmt.Sprint(part) //fmt.Println(part)
 			}
 		}
 	}
-	fmt.Println("---")
+	return response
+}
+
+type GeminiChatRequest struct {
+	Model   string `json:"model"`
+	Text    string `json:"text"`
+}
+
+type GeminiChatResponse struct {
+	Response string `json:"response"`
 }
