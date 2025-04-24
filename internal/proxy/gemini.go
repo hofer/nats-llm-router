@@ -137,7 +137,7 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 
 	res, err := session.SendMessage(ctx, genai.Text(reqData.Text))
 	if err != nil {
-		log.Error("session.SendMessage: %v", err)
+		log.Errorf("session.SendMessage: %v", err)
 		req.Error("500", err.Error(), nil)
 		return
 	}
