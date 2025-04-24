@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"github.com/hofer/nats-llm/pkq/llm"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"encoding/json"
@@ -72,7 +73,7 @@ func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
 
 func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 
-	var reqData GeminiChatRequest
+	var reqData llm.GeminiChatRequest
 	err := json.Unmarshal(req.Data(), &reqData)
 	if err != nil {
 		req.Error("400", err.Error(), nil)
@@ -164,7 +165,7 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	//	}
 	//	printResponse(res)
 
-	resData := GeminiChatResponse{
+	resData := llm.GeminiChatResponse{
 		Response: getResponseText(res),
 		//History = session.History
 	}
@@ -188,13 +189,4 @@ func getResponseText(resp *genai.GenerateContentResponse) string{
 		}
 	}
 	return response
-}
-
-type GeminiChatRequest struct {
-	Model   string `json:"model"`
-	Text    string `json:"text"`
-}
-
-type GeminiChatResponse struct {
-	Response string `json:"response"`
 }
