@@ -20,7 +20,10 @@ func StartOllamaProxy(natsUrl string, ollamaUrl string) error {
 	}
 
 	natsOllamaProxy := NewNatsOllamaProxy()
-	natsOllamaProxy.Start(nc)
+	err = natsOllamaProxy.Start(nc)
+	if err != nil {
+		return err
+	}
 
 	runtime.Goexit()
 	return nil
@@ -34,11 +37,11 @@ func NewNatsOllamaProxy() *NatsOllamaProxy {
 	return &NatsOllamaProxy{}
 }
 
-func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
+func (n *NatsOllamaProxy) Start(nc *nats.Conn) error {
 	log.Infof("Starting nats-ollama-proxy...")
 	client, err := api.ClientFromEnvironment()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	n.client = client
 
@@ -48,7 +51,7 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 		Description: "Nats microservice acting as a proxy for Ollama.",
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	//defer srv.Stop()
 
@@ -63,7 +66,7 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 		"schema": generateSchema,
 	}))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Embed
@@ -72,7 +75,7 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 		"schema": embedSchema,
 	}))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Embedding
@@ -81,7 +84,7 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 		"schema": embeddingSchema,
 	}))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Chat
@@ -89,9 +92,7 @@ func (n *NatsOllamaProxy) Start(nc *nats.Conn) {
 	err = root.AddEndpoint("chat", micro.HandlerFunc(n.chatHandler), micro.WithEndpointMetadata(map[string]string{
 		"schema": chatSchema,
 	}))
-	if err != nil {
-		log.Fatal(err)
-	}
+	return err
 }
 
 func (n *NatsOllamaProxy) generateHandler(req micro.Request) {
@@ -110,7 +111,7 @@ func (n *NatsOllamaProxy) generateHandler(req micro.Request) {
 	respFunc := func(resp api.GenerateResponse) error {
 		// Only print the response here; GenerateResponse has a number of other
 		// interesting fields you want to examine.
-		fmt.Println()
+		//fmt.Println()
 
 		responseData, err := json.Marshal(resp)
 		if err != nil {
@@ -140,7 +141,7 @@ func (n *NatsOllamaProxy) embedHandler(req micro.Request) {
 
 	err = n.pullMissingModel(err, reqData.Model)
 	if err != nil {
-		log.Error("Error on check for missing model:", err)
+		log.Error("Error when checking/pulling a missing model:", err)
 		req.Error("500", err.Error(), nil)
 		return
 	}
@@ -197,9 +198,7 @@ func (n *NatsOllamaProxy) chatHandler(req micro.Request) {
 	// Set streaming to false, thus making sure we wait for a response.
 	reqData.Stream = new(bool)
 
-	log.Infof("Chat Request for model: '%s'", reqData.Model)
-
-	ctx := context.Background()
+	log.Infof("Chat request for model: '%s'", reqData.Model)
 	respFunc := func(resp api.ChatResponse) error {
 		responseData, err := json.Marshal(resp)
 		if err != nil {
@@ -213,13 +212,22 @@ func (n *NatsOllamaProxy) chatHandler(req micro.Request) {
 
 	err = n.pullMissingModel(err, reqData.Model)
 	if err != nil {
-		log.Error("Error check for missing model:", err)
+		log.Error("Error when checking/pulling a missing model:", err)
 		req.Error("500", err.Error(), nil)
 		return
 	}
 
-	err = n.client.Chat(ctx, &reqData, respFunc)
-	if err != nil {
+	ctxChat := context.Background()
+	var chatError error
+	sp := spinner.New()
+	action := func() {
+		chatError = n.client.Chat(ctxChat, &reqData, respFunc)
+	}
+
+	err = sp.Title(fmt.Sprintf("Processing chat request for model '%s'...", reqData.Model)).Action(action).Run()
+
+	//err = n.client.Chat(ctx, &reqData, respFunc)
+	if err != nil || chatError != nil {
 		log.Error("Error marshalling response:", err)
 		req.Error("400", err.Error(), nil)
 	}

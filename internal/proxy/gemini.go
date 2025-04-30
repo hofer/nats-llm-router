@@ -10,7 +10,9 @@ import (
 	"github.com/ollama/ollama/api"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
+	"net/http"
 	"runtime"
+	"strings"
 )
 
 func StartNatsGeminiProxy(natsUrl string, apiKey string) error {
@@ -20,14 +22,16 @@ func StartNatsGeminiProxy(natsUrl string, apiKey string) error {
 	}
 
 	natsGeminiProxy := NewNatsGeminiProxy(apiKey)
-	natsGeminiProxy.Start(nc)
+	err = natsGeminiProxy.Start(nc)
+	if err != nil {
+		return err
+	}
 
 	runtime.Goexit()
 	return nil
 }
 
 type NatsGeminiProxy struct {
-	//client *genai.Client
 	apiKey string
 }
 
@@ -37,22 +41,14 @@ func NewNatsGeminiProxy(apiKey string) *NatsGeminiProxy {
 	}
 }
 
-func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
-	//ctx := context.Background()
-	//client, err := genai.NewClient(ctx, option.WithAPIKey(n.apiKey))
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	////defer client.Close()
-	//n.client = client
-
+func (n *NatsGeminiProxy) Start(nc *nats.Conn) error {
 	srv, err := micro.AddService(nc, micro.Config{
 		Name:        "NatsGemini",
 		Version:     "0.0.1",
 		Description: "Nats microservice acting as a proxy for Gemini.",
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	//defer srv.Stop()
 
@@ -61,18 +57,15 @@ func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
 	// Chat
 	chatSchema, err := GetGeminiSchemaChat()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	err = root.AddEndpoint("chat", micro.HandlerFunc(n.chatHandler), micro.WithEndpointMetadata(map[string]string{
 		"schema": chatSchema,
 	}))
-	if err != nil {
-		log.Fatal(err)
-	}
+	return err
 }
 
 func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
-
 	var reqData api.ChatRequest
 	err := json.Unmarshal(req.Data(), &reqData)
 	if err != nil {
@@ -136,7 +129,16 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	//session.History = reqData.History
 
 	msgs := reqData.Messages
-	res, err := session.SendMessage(ctx, genai.Text(msgs[len(msgs)-1].Content))
+	userMessage := msgs[len(msgs)-1]
+
+	userInput := []genai.Part{genai.Text(userMessage.Content)}
+
+	for _, imageData := range userMessage.Images {
+		mimeType := http.DetectContentType(imageData)
+		userInput = append(userInput, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
+	}
+
+	res, err := session.SendMessage(ctx, userInput...)
 	if err != nil {
 		log.Errorf("session.SendMessage: %v", err)
 		req.Error("500", err.Error(), nil)

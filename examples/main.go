@@ -6,7 +6,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/ollama/ollama/api"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"os"
+	"time"
 )
 
 func main() {
@@ -19,19 +21,22 @@ func main() {
 	chatWithOllama(nc)
 
 	// Example to chat with Gemini
-	chatWithGemmini(nc)
+	chatWithGemini(nc)
 }
 
 func chatWithOllama(nc *nats.Conn) {
 	ollamaLlm := llm.NewNatsOllamaLLM(nc)
 
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(context.Background(), time.Minute*5)
 	ollamaRes, err := ollamaLlm.Chat(ctx, &api.ChatRequest{
-		Model: "gemma3:12b",
+		Model: "gemma3:27b",
 		Messages: []api.Message{
 			{
 				Role:    "user",
-				Content: "Who is the current president of the USA?",
+				Content: "How many people are in this image?",
+				Images: []api.ImageData{
+					readImageData(),
+				},
 			},
 		},
 	})
@@ -42,17 +47,20 @@ func chatWithOllama(nc *nats.Conn) {
 	log.Info(ollamaRes.Message.Content)
 }
 
-func chatWithGemmini(nc *nats.Conn) {
+func chatWithGemini(nc *nats.Conn) {
 	geminiLlm := llm.NewNatsGeminiLLM(nc)
 
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*60)
 	geminiRes, err := geminiLlm.Chat(ctx, &api.ChatRequest{
-		Model: "gemini-2.5-flash-preview-04-17",
+		Model: "gemini-2.5-pro-exp-03-25",
 
 		Messages: []api.Message{
 			{
 				Role:    "user",
-				Content: "Who is the current president of the USA?",
+				Content: "What is the man in the middle holding in his hands?",
+				Images: []api.ImageData{
+					readImageData(),
+				},
 			},
 		},
 	})
@@ -61,4 +69,21 @@ func chatWithGemmini(nc *nats.Conn) {
 	}
 
 	log.Info(geminiRes.Message.Content)
+}
+
+func readImageData() api.ImageData {
+	filePath := "example.png"
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Fatalf("Error opening file %s: %v", filePath, err)
+	}
+	// 2. Ensure the file is closed when the function exits
+	defer file.Close()
+
+	// 3. Read all bytes from the file
+	data, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Error reading file %s: %v", filePath, err)
+	}
+	return data
 }
