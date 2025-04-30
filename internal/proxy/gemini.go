@@ -3,7 +3,9 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
@@ -125,20 +127,24 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	// 3. We send a FunctionResponse message, simulating the return value of
 	//    the tool for the model's query.
 	// 4. The model provides its text answer in response to this message.
-	session := model.StartChat()
+	//session := model.StartChat()
 	//session.History = reqData.History
 
-	msgs := reqData.Messages
-	userMessage := msgs[len(msgs)-1]
-
-	userInput := []genai.Part{genai.Text(userMessage.Content)}
-
-	for _, imageData := range userMessage.Images {
-		mimeType := http.DetectContentType(imageData)
-		userInput = append(userInput, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
+	userContentParts, contentErr := createUserContentParts(reqData)
+	if contentErr != nil {
+		log.Errorf("session.SendMessage: %v", err)
+		req.Error("500", err.Error(), nil)
+		return
 	}
 
-	res, err := session.SendMessage(ctx, userInput...)
+	var res *genai.GenerateContentResponse
+	sp := spinner.New()
+	action := func() {
+		res, err = model.GenerateContent(ctx, userContentParts...)
+
+	}
+
+	sp.Title(fmt.Sprintf("Generate content with model '%s'...", reqData.Model)).Action(action).Run()
 	if err != nil {
 		log.Errorf("session.SendMessage: %v", err)
 		req.Error("500", err.Error(), nil)
@@ -180,8 +186,27 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 		return
 	}
 
-	log.Info(string(responseData))
+	log.Debug(string(responseData))
 	err = req.Respond(responseData)
+}
+
+func createUserContentParts(reqData api.ChatRequest) ([]genai.Part, error) {
+	// we assume that the last message is a user message:
+	if len(reqData.Messages) == 0 {
+		return nil, errors.New("no message content found in the request")
+	}
+
+	userMessage := reqData.Messages[len(reqData.Messages)-1]
+	if strings.ToLower(userMessage.Role) != "user" {
+		return nil, errors.New("message role must be 'user'")
+	}
+
+	userInput := []genai.Part{genai.Text(userMessage.Content)}
+	for _, imageData := range userMessage.Images {
+		mimeType := http.DetectContentType(imageData)
+		userInput = append(userInput, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
+	}
+	return userInput, nil
 }
 
 func getResponseText(resp *genai.GenerateContentResponse) string {
@@ -195,17 +220,3 @@ func getResponseText(resp *genai.GenerateContentResponse) string {
 	}
 	return response
 }
-
-//func uhdsfkuasdf() {
-//
-//	t := genai.Text("hello")
-//
-//	//req := &generativelanguagepb.GenerateContentRequest{}
-//	req := &generativelanguagepb.Part{}
-//	m := protojson.MarshalOptions{AllowPartial: true, UseEnumNumbers: true}
-//	jsonReq, err := m.Marshal(req)
-//	//jsonReq, err := m.Marshal(req)
-//
-//	log.Error(err)
-//	log.Printf(string(jsonReq))
-//}
