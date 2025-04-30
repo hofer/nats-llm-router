@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 )
 
 func StartNatsGeminiProxy(natsUrl string, apiKey string) error {
@@ -127,8 +128,8 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	// 3. We send a FunctionResponse message, simulating the return value of
 	//    the tool for the model's query.
 	// 4. The model provides its text answer in response to this message.
-	//session := model.StartChat()
-	//session.History = reqData.History
+	session := model.StartChat()
+	session.History = createHistoryContent(reqData)
 
 	userContentParts, contentErr := createUserContentParts(reqData)
 	if contentErr != nil {
@@ -140,8 +141,8 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	var res *genai.GenerateContentResponse
 	sp := spinner.New()
 	action := func() {
-		res, err = model.GenerateContent(ctx, userContentParts...)
-
+		res, err = session.SendMessage(ctx, userContentParts...)
+		//res, err = model.GenerateContent(ctx, userContentParts...)
 	}
 
 	sp.Title(fmt.Sprintf("Generate content with model '%s'...", reqData.Model)).Action(action).Run()
@@ -174,11 +175,13 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	//	}
 	//	printResponse(res)
 
-	ollamaResp := api.ChatResponse{
-		Message: api.Message{
-			Content: getResponseText(res),
-		},
+	ollamaResp, err := createOllamaResponse(res)
+	if err != nil {
+		log.Errorf("cannot create a response: %v", err)
+		req.Error("400", err.Error(), nil)
+		return
 	}
+
 	responseData, err := json.Marshal(ollamaResp)
 	if err != nil {
 		log.Errorf("cannot create a response: %v", err)
@@ -188,6 +191,52 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 
 	log.Debug(string(responseData))
 	err = req.Respond(responseData)
+}
+
+func createOllamaResponse(resp *genai.GenerateContentResponse) (api.ChatResponse, error) {
+	if len(resp.Candidates) > 1 {
+		return api.ChatResponse{}, errors.New("too many candidates")
+	}
+
+	cand := resp.Candidates[0]
+
+	responseText := ""
+	if cand.Content != nil {
+		for _, part := range cand.Content.Parts {
+			switch part.(type) {
+			case genai.Text:
+				responseText += fmt.Sprint(part)
+			default:
+				// Not handled...
+			}
+		}
+	}
+
+	return api.ChatResponse{
+		CreatedAt: time.Now(),
+		Message: api.Message{
+			Content: responseText,
+			Role:    "model",
+		},
+		DoneReason: cand.FinishReason.String(),
+		Done:       cand.FinishReason == genai.FinishReasonStop,
+	}, nil
+}
+
+func createHistoryContent(reqData api.ChatRequest) []*genai.Content {
+	if len(reqData.Messages) == 1 {
+		return []*genai.Content{}
+	}
+
+	result := []*genai.Content{}
+	messages := reqData.Messages[:len(reqData.Messages)-1]
+	for _, message := range messages {
+		result = append(result, &genai.Content{
+			Role:  message.Role,
+			Parts: createContentParts(message),
+		})
+	}
+	return result
 }
 
 func createUserContentParts(reqData api.ChatRequest) ([]genai.Part, error) {
@@ -201,22 +250,14 @@ func createUserContentParts(reqData api.ChatRequest) ([]genai.Part, error) {
 		return nil, errors.New("message role must be 'user'")
 	}
 
-	userInput := []genai.Part{genai.Text(userMessage.Content)}
-	for _, imageData := range userMessage.Images {
-		mimeType := http.DetectContentType(imageData)
-		userInput = append(userInput, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
-	}
-	return userInput, nil
+	return createContentParts(userMessage), nil
 }
 
-func getResponseText(resp *genai.GenerateContentResponse) string {
-	response := ""
-	for _, cand := range resp.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
-				response += fmt.Sprint(part) //fmt.Println(part)
-			}
-		}
+func createContentParts(message api.Message) []genai.Part {
+	parts := []genai.Part{genai.Text(message.Content)}
+	for _, imageData := range message.Images {
+		mimeType := http.DetectContentType(imageData)
+		parts = append(parts, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
 	}
-	return response
+	return parts
 }
