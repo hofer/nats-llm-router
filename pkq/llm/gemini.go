@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/nats-io/nats.go"
+	"github.com/ollama/ollama/api"
 	"time"
 )
 
@@ -17,34 +18,28 @@ type NatsGeminiLLM struct {
 	client *nats.Conn
 }
 
-func (n *NatsGeminiLLM) Chat(ctx context.Context, req *GeminiChatRequest) (GeminiChatResponse, error) {
+func (n *NatsGeminiLLM) Chat(ctx context.Context, req *api.ChatRequest) (api.ChatResponse, error) {
 	jsonStr, err := json.Marshal(req)
 	if err != nil {
-		return GeminiChatResponse{}, err
+		return api.ChatResponse{}, err
 	}
 
-	deadline, _ := ctx.Deadline()
-	remainingDuration := time.Until(deadline)
+	remainingDuration := time.Second * 30
+	deadline, ok := ctx.Deadline()
+	if ok {
+		remainingDuration = time.Until(deadline)
+	}
 
 	msg, err := n.client.Request("gemini.chat", jsonStr, remainingDuration)
 	if err != nil {
-		return GeminiChatResponse{}, err
+		return api.ChatResponse{}, err
 	}
 
-	var chatResponse GeminiChatResponse
+	var chatResponse api.ChatResponse
 	err = json.Unmarshal(msg.Data, &chatResponse)
 	if err != nil {
-		return GeminiChatResponse{}, err
+		return api.ChatResponse{}, err
 	}
 
 	return chatResponse, nil
-}
-
-type GeminiChatRequest struct {
-	Model   string `json:"model"`
-	Text    string `json:"text"`
-}
-
-type GeminiChatResponse struct {
-	Response string `json:"response"`
 }

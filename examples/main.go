@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/hofer/nats-llm/pkq/llm"
 	"github.com/nats-io/nats.go"
-	log "github.com/sirupsen/logrus"
 	"github.com/ollama/ollama/api"
+	log "github.com/sirupsen/logrus"
 	"os"
 )
 
@@ -15,22 +15,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-
 	// Example to chat with Ollama
 	chatWithOllama(nc)
 
 	// Example to chat with Gemini
 	chatWithGemmini(nc)
 }
+
 func chatWithOllama(nc *nats.Conn) {
 	ollamaLlm := llm.NewNatsOllamaLLM(nc)
 
 	ctx := context.Background()
 	ollamaRes, err := ollamaLlm.Chat(ctx, &api.ChatRequest{
-		Model: "",
+		Model: "gemma3:12b",
 		Messages: []api.Message{
 			{
-				Role: "user",
+				Role:    "user",
 				Content: "Who is the current president of the USA?",
 			},
 		},
@@ -46,13 +46,19 @@ func chatWithGemmini(nc *nats.Conn) {
 	geminiLlm := llm.NewNatsGeminiLLM(nc)
 
 	ctx := context.Background()
-	geminiRes, err := geminiLlm.Chat(ctx, &llm.GeminiChatRequest{
-		Model: "",
-		Text: "Who is the current president of the USA?",
+	geminiRes, err := geminiLlm.Chat(ctx, &api.ChatRequest{
+		Model: "gemini-2.5-flash-preview-04-17",
+
+		Messages: []api.Message{
+			{
+				Role:    "user",
+				Content: "Who is the current president of the USA?",
+			},
+		},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Info(geminiRes.Response)
+	log.Info(geminiRes.Message.Content)
 }

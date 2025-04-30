@@ -1,7 +1,9 @@
 package proxy
 
-import "github.com/hofer/nats-llm/pkq/llm"
+import (
+	"github.com/ollama/ollama/api"
+)
 
 func GetGeminiSchemaChat() (string, error) {
-	return marshalSchema(&llm.GeminiChatRequest{}, &llm.GeminiChatResponse{})
+	return marshalSchema(&api.ChatRequest{}, &api.ChatResponse{})
 }

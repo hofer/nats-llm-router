@@ -2,26 +2,24 @@ package proxy
 
 import (
 	"context"
-	"fmt"
-	"github.com/hofer/nats-llm/pkq/llm"
-	log "github.com/sirupsen/logrus"
-	"os"
 	"encoding/json"
-
+	"fmt"
 	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
+	"github.com/ollama/ollama/api"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/api/option"
 	"runtime"
 )
 
-func StartNatsGeminiProxy(natsUrl string, ollamaUrl string) error {
+func StartNatsGeminiProxy(natsUrl string, apiKey string) error {
 	nc, err := nats.Connect(natsUrl)
 	if err != nil {
 		return err
 	}
 
-	natsGeminiProxy := NewNatsGeminiProxy()
+	natsGeminiProxy := NewNatsGeminiProxy(apiKey)
 	natsGeminiProxy.Start(nc)
 
 	runtime.Goexit()
@@ -29,21 +27,24 @@ func StartNatsGeminiProxy(natsUrl string, ollamaUrl string) error {
 }
 
 type NatsGeminiProxy struct {
-	client *genai.Client
+	//client *genai.Client
+	apiKey string
 }
 
-func NewNatsGeminiProxy() *NatsGeminiProxy {
-	return &NatsGeminiProxy{}
+func NewNatsGeminiProxy(apiKey string) *NatsGeminiProxy {
+	return &NatsGeminiProxy{
+		apiKey: apiKey,
+	}
 }
 
 func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
-	if err != nil {
-		log.Fatal(err)
-	}
-	//defer client.Close()
-	n.client = client
+	//ctx := context.Background()
+	//client, err := genai.NewClient(ctx, option.WithAPIKey(n.apiKey))
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	////defer client.Close()
+	//n.client = client
 
 	srv, err := micro.AddService(nc, micro.Config{
 		Name:        "NatsGemini",
@@ -56,7 +57,6 @@ func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
 	//defer srv.Stop()
 
 	root := srv.AddGroup("gemini")
-
 
 	// Chat
 	chatSchema, err := GetGeminiSchemaChat()
@@ -73,7 +73,7 @@ func (n *NatsGeminiProxy) Start(nc *nats.Conn) {
 
 func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 
-	var reqData llm.GeminiChatRequest
+	var reqData api.ChatRequest
 	err := json.Unmarshal(req.Data(), &reqData)
 	if err != nil {
 		req.Error("400", err.Error(), nil)
@@ -81,14 +81,14 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	}
 
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(n.apiKey))
 	if err != nil {
 		log.Error(err)
 		req.Error("500", err.Error(), nil)
 		return
 	}
 	defer client.Close()
-	//
+
 	//	// To use functions / tools, we have to first define a schema that describes
 	//	// the function to the model. The schema is similar to OpenAPI 3.0.
 	//	schema := &genai.Schema{
@@ -135,7 +135,8 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	session := model.StartChat()
 	//session.History = reqData.History
 
-	res, err := session.SendMessage(ctx, genai.Text(reqData.Text))
+	msgs := reqData.Messages
+	res, err := session.SendMessage(ctx, genai.Text(msgs[len(msgs)-1].Content))
 	if err != nil {
 		log.Errorf("session.SendMessage: %v", err)
 		req.Error("500", err.Error(), nil)
@@ -165,21 +166,23 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	//	}
 	//	printResponse(res)
 
-	resData := llm.GeminiChatResponse{
-		Response: getResponseText(res),
-		//History = session.History
+	ollamaResp := api.ChatResponse{
+		Message: api.Message{
+			Content: getResponseText(res),
+		},
 	}
-
-	responseData, err := json.Marshal(resData)
+	responseData, err := json.Marshal(ollamaResp)
 	if err != nil {
-		log.Error("Error marshalling response:", err)
-		req.Error("500", err.Error(), nil)
+		log.Errorf("cannot create a response: %v", err)
+		req.Error("400", err.Error(), nil)
 		return
 	}
+
+	log.Info(string(responseData))
 	err = req.Respond(responseData)
 }
 
-func getResponseText(resp *genai.GenerateContentResponse) string{
+func getResponseText(resp *genai.GenerateContentResponse) string {
 	response := ""
 	for _, cand := range resp.Candidates {
 		if cand.Content != nil {
@@ -190,3 +193,17 @@ func getResponseText(resp *genai.GenerateContentResponse) string{
 	}
 	return response
 }
+
+//func uhdsfkuasdf() {
+//
+//	t := genai.Text("hello")
+//
+//	//req := &generativelanguagepb.GenerateContentRequest{}
+//	req := &generativelanguagepb.Part{}
+//	m := protojson.MarshalOptions{AllowPartial: true, UseEnumNumbers: true}
+//	jsonReq, err := m.Marshal(req)
+//	//jsonReq, err := m.Marshal(req)
+//
+//	log.Error(err)
+//	log.Printf(string(jsonReq))
+//}

@@ -1,13 +1,15 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/hofer/nats-llm/internal/proxy"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"os"
 )
 
-// proxygenminiCmd represents the proxygenmini command
-var proxygenminiCmd = &cobra.Command{
+var apiKey string
+
+var proxyGenminiCmd = &cobra.Command{
 	Use:   "gemini",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
@@ -17,20 +19,15 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("proxygenmini called")
+		log.Infof("Connecting to the Nats.io Server: %s", proxyNatsUrl)
+		err := proxy.StartNatsGeminiProxy(proxyNatsUrl, apiKey)
+		if err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 
 func init() {
-	proxyCmd.AddCommand(proxygenminiCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// proxygenminiCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// proxygenminiCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	proxyCmd.AddCommand(proxyGenminiCmd)
+	proxyGenminiCmd.PersistentFlags().StringVarP(&apiKey, "apiKey", "k", os.Getenv("GEMINI_API_KEY"), "Gemini API key")
 }
