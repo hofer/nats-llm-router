@@ -227,7 +227,11 @@ func (n *NatsOllamaProxy) chatHandler(req micro.Request) {
 	err = sp.Title(fmt.Sprintf("Processing chat request for model '%s'...", reqData.Model)).Action(action).Run()
 
 	//err = n.client.Chat(ctx, &reqData, respFunc)
-	if err != nil || chatError != nil {
+	if chatError != nil {
+		log.Error("Error marshalling response:", chatError)
+		req.Error("400", chatError.Error(), nil)
+	}
+	if err != nil {
 		log.Error("Error marshalling response:", err)
 		req.Error("400", err.Error(), nil)
 	}

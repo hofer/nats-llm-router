@@ -22,8 +22,15 @@ func main() {
 
 	// Example to chat with Gemini
 	chatWithGemini(nc)
+
+	// Example with tool calling in Ollama
+	toolCallingWithOllama(nc)
+
+	// Example with tool calling in Gemini
+	toolCallingWithGemini(nc)
 }
 
+// Note: This example is deliberately verbose, so it is easy to understand:
 func chatWithOllama(nc *nats.Conn) {
 	ollamaLlm := llm.NewNatsOllamaLLM(nc)
 
@@ -48,6 +55,7 @@ func chatWithOllama(nc *nats.Conn) {
 	log.Info(ollamaRes.Message.Content)
 }
 
+// Note: This example is deliberately verbose, so it is easy to understand:
 func chatWithGemini(nc *nats.Conn) {
 	geminiLlm := llm.NewNatsGeminiLLM(nc)
 
@@ -59,34 +67,34 @@ func chatWithGemini(nc *nats.Conn) {
 			readImageData(),
 		},
 	}
-	geminiRes, err := geminiLlm.Chat(ctx, &api.ChatRequest{
+	geminiRes1, err1 := geminiLlm.Chat(ctx, &api.ChatRequest{
 		Model: "gemini-2.5-pro-exp-03-25",
 		Messages: []api.Message{
 			firstMessage,
 		},
 	})
-	if err != nil {
-		log.Fatal(err)
+	if err1 != nil {
+		log.Fatal(err1)
 	}
 
-	log.Infof("First response from LLM: %s", geminiRes.Message.Content)
+	log.Infof("First response from LLM: %s", geminiRes1.Message.Content)
 	secondMessage := api.Message{
 		Role:    "user",
 		Content: "Is the person on the left holding flowers as well?",
 	}
-	geminiRes, err = geminiLlm.Chat(ctx, &api.ChatRequest{
+	geminiRes2, err2 := geminiLlm.Chat(ctx, &api.ChatRequest{
 		Model: "gemini-2.5-pro-exp-03-25",
 		Messages: []api.Message{
 			firstMessage,
-			geminiRes.Message,
+			geminiRes1.Message,
 			secondMessage,
 		},
 	})
-	if err != nil {
-		log.Fatal(err)
+	if err2 != nil {
+		log.Fatal(err2)
 	}
 
-	log.Infof("Second response from LLM: %s", geminiRes.Message.Content)
+	log.Infof("Second response from LLM: %s", geminiRes2.Message.Content)
 }
 
 func readImageData() api.ImageData {
@@ -104,4 +112,125 @@ func readImageData() api.ImageData {
 		log.Fatalf("Error reading file %s: %v", filePath, err)
 	}
 	return data
+}
+
+// Note: This example is deliberately verbose, so it is easy to understand:
+func toolCallingWithOllama(nc *nats.Conn) {
+	ollamaLlm := llm.NewNatsOllamaLLM(nc)
+
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*60)
+	firstMessage := api.Message{
+		Role:    "user",
+		Content: "What is the current temperature in New York City??",
+	}
+	ollamaRes1, err1 := ollamaLlm.Chat(ctx, &api.ChatRequest{
+		Model: "mistral-small:24b",
+		Messages: []api.Message{
+			firstMessage,
+		},
+		Tools: getTools(),
+	})
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+	log.Infof("Is this the expected tool call? %v", ollamaRes1.Message.ToolCalls)
+
+	toolResult := `{"status": "success", "data": "21 degrees celsius.", "name": "get_temperature"}` // Example tool output (often JSON)
+	secondMessage := api.Message{
+		Role:    "tool",
+		Content: toolResult,
+	}
+	ollamaRes2, err2 := ollamaLlm.Chat(ctx, &api.ChatRequest{
+		Model: "mistral-small:24b",
+		Messages: []api.Message{
+			firstMessage,
+			ollamaRes1.Message,
+			secondMessage,
+		},
+	})
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+
+	log.Infof("Second response from LLM: %s", ollamaRes2.Message.Content)
+}
+
+// Note: This example is deliberately verbose, so it is easy to understand:
+func toolCallingWithGemini(nc *nats.Conn) {
+	geminiLlm := llm.NewNatsGeminiLLM(nc)
+
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*60)
+	firstMessage := api.Message{
+		Role:    "user",
+		Content: "What is the current temperature in New York City??",
+	}
+	geminiRes1, err1 := geminiLlm.Chat(ctx, &api.ChatRequest{
+		Model: "gemini-2.5-flash-preview-04-17",
+		Messages: []api.Message{
+			firstMessage,
+		},
+		Tools: getTools(),
+	})
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+	log.Infof("Is this the expected tool call? %s", geminiRes1.Message.ToolCalls)
+
+	toolResult := `{"status": "success", "data": "21 degrees celsius.", "name": "get_temperature"}` // Example tool output (often JSON)
+	secondMessage := api.Message{
+		Role:    "tool",
+		Content: toolResult,
+	}
+	geminiRes2, err2 := geminiLlm.Chat(ctx, &api.ChatRequest{
+		Model: "gemini-2.5-flash-preview-04-17",
+		Messages: []api.Message{
+			firstMessage,
+			geminiRes1.Message,
+			secondMessage,
+		},
+	})
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+
+	log.Infof("Second response from LLM: %s", geminiRes2.Message.Content)
+}
+
+func getTools() []api.Tool {
+	return []api.Tool{
+		{
+			Type: "tool",
+			Function: api.ToolFunction{
+				Name:        "get_temperature",
+				Description: "Returns the current temperature for a given city name",
+				Parameters: struct {
+					Type       string   `json:"type"`
+					Defs       any      `json:"$defs,omitempty"`
+					Items      any      `json:"items,omitempty"`
+					Required   []string `json:"required"`
+					Properties map[string]struct {
+						Type        api.PropertyType `json:"type"`
+						Items       any              `json:"items,omitempty"`
+						Description string           `json:"description"`
+						Enum        []any            `json:"enum,omitempty"`
+					} `json:"properties"`
+				}{
+					Type: "object",
+					Properties: map[string]struct {
+						Type        api.PropertyType `json:"type"`
+						Items       any              `json:"items,omitempty"`
+						Description string           `json:"description"`
+						Enum        []any            `json:"enum,omitempty"`
+					}{
+						"city": {
+							Type: api.PropertyType{
+								"string",
+							},
+							Description: "The name of the city",
+						},
+					},
+				},
+			},
+		},
+	}
 }
