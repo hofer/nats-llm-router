@@ -19,11 +19,20 @@ func createHistoryContent(reqData api.ChatRequest) []*genai.Content {
 	if len(reqData.Messages) == 1 {
 		return []*genai.Content{}
 	}
-
 	result := []*genai.Content{}
+
+	// We assume that the last message is the user input:
 	messages := reqData.Messages[:len(reqData.Messages)-1]
 	for _, message := range messages {
 		role := message.Role
+
+		// We will skip system prompts as part of the history.
+		// Gemini handles system prompts separately.
+		if role == "system" {
+			continue
+		}
+
+		// Gemini uses role 'model' for llm generated messages while ollama uses the role 'assistant'
 		if role == "assistant" {
 			role = "model"
 		}
@@ -75,6 +84,17 @@ func createContentParts(message api.Message) []genai.Part {
 		parts = append(parts, genai.ImageData(strings.Split(mimeType, "/")[1], imageData))
 	}
 	return parts
+}
+
+func createGeminiSystemPrompt(data api.ChatRequest) *genai.Content {
+	for _, m := range data.Messages {
+		if m.Role == "system" {
+			return &genai.Content{
+				Parts: []genai.Part{genai.Text(m.Content)},
+			}
+		}
+	}
+	return nil
 }
 
 func createGeminiToolSchema(reqData api.ChatRequest) []*genai.Tool {

@@ -83,6 +83,12 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 
 	model := client.GenerativeModel(reqData.Model) // "gemini-1.5-pro-latest"
 
+	// Set system prompt if available in the message history:
+	systemPrompt := createGeminiSystemPrompt(reqData)
+	if systemPrompt != nil {
+		model.SystemInstruction = systemPrompt
+	}
+
 	// Before initiating a conversation, we tell the model which tools it has
 	// at its disposal.
 	model.Tools = createGeminiToolSchema(reqData)
