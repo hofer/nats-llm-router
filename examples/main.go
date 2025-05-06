@@ -162,7 +162,7 @@ func toolCallingWithGemini(nc *nats.Conn) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*60)
 	firstMessage := api.Message{
 		Role:    "user",
-		Content: "What is the current temperature in New York City??",
+		Content: "What time is it?",
 	}
 	geminiRes1, err1 := geminiLlm.Chat(ctx, &api.ChatRequest{
 		Model: "gemini-2.5-flash-preview-04-17",
@@ -230,6 +230,13 @@ func getTools() []api.Tool {
 						},
 					},
 				},
+			},
+		},
+		{
+			Type: "tool",
+			Function: api.ToolFunction{
+				Name:        "get_time",
+				Description: "Returns the current time",
 			},
 		},
 	}

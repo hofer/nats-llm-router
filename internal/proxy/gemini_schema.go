@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/ollama/ollama/api"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"time"
@@ -98,7 +99,7 @@ func createGeminiSystemPrompt(data api.ChatRequest) *genai.Content {
 }
 
 func createGeminiToolSchema(reqData api.ChatRequest) []*genai.Tool {
-	result := make([]*genai.Tool, 0)
+	result := []*genai.Tool{}
 	for _, tool := range reqData.Tools {
 		props := map[string]*genai.Schema{}
 		for name, prop := range tool.Function.Parameters.Properties {
@@ -112,15 +113,17 @@ func createGeminiToolSchema(reqData api.ChatRequest) []*genai.Tool {
 			Type:       genai.TypeObject,
 			Properties: props,
 		}
-		geminiToolTool := &genai.Tool{
+		geminiTool := &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{{
 				Name:        tool.Function.Name,
 				Description: tool.Function.Description,
 				Parameters:  parametersSchema,
 			}},
 		}
-		result = append(result, geminiToolTool)
+		result = append(result, geminiTool)
 	}
+	v, _ := json.Marshal(result)
+	log.Infof("%v", string(v))
 	return result
 }
 
@@ -132,6 +135,9 @@ func createOllamaResponse(resp *genai.GenerateContentResponse) (api.ChatResponse
 	responseText := ""
 	toolCalls := []api.ToolCall{}
 
+	if len(resp.Candidates) != 1 {
+		log.Errorf("We seem to get zero or more than one candidate. Not something we are expecting.")
+	}
 	candidate := resp.Candidates[0]
 	if candidate.Content != nil {
 		for _, part := range candidate.Content.Parts {

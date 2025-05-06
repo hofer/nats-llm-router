@@ -81,7 +81,7 @@ func (n *NatsGeminiProxy) chatHandler(req micro.Request) {
 	}
 	defer client.Close()
 
-	model := client.GenerativeModel(reqData.Model) // "gemini-1.5-pro-latest"
+	model := client.GenerativeModel(reqData.Model)
 
 	// Set system prompt if available in the message history:
 	systemPrompt := createGeminiSystemPrompt(reqData)
