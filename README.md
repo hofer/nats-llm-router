@@ -1,6 +1,7 @@
 # 🏁 NATS to LLM proxy/router
+![workflow](https://github.com/hofer/nats-llm/actions/workflows/build.yml/badge.svg)
 
-This cli tool makes Ollama or Gemini LLMs accessible via MATS microservices. Requests sent to this NATS microservice are
+This cli tool makes Ollama or Gemini LLMs accessible via NATS microservices. Requests sent to this NATS microservice are
 forwarded to the corresponding LLM.
 
 > [!WARNING]
@@ -12,6 +13,7 @@ Run the following command to start an Ollama proxy:
 ./nats-llm proxy ollama --url="nats://localhost:4222"
 ```
 
+Please check the [the examples folder](./examples) to see how a client can access an LLM exposed via NATS.
 
 ## Testing
 
