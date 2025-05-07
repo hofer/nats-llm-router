@@ -7,7 +7,7 @@ require (
 	github.com/google/generative-ai-go v0.20.1
 	github.com/invopop/jsonschema v0.13.0
 	github.com/nats-io/nats.go v1.42.0
-	github.com/ollama/ollama v0.6.6
+	github.com/ollama/ollama v0.6.8
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
