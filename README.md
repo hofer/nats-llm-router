@@ -5,6 +5,8 @@ This cli tool makes Ollama or Gemini LLMs accessible via NATS microservices. Req
 forwarded to the corresponding LLM.
 
 > [!WARNING]
+> 🚨 🚧 This tool is under active development 🚧 🚨
+>
 > This tool is very much work in progress. Expect almost daily breaking changes...
 
 
