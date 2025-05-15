@@ -99,7 +99,7 @@ func createGeminiSystemPrompt(data api.ChatRequest) *genai.Content {
 }
 
 func createGeminiToolSchema(reqData api.ChatRequest) []*genai.Tool {
-	result := []*genai.Tool{}
+	geminiFunctions := []*genai.FunctionDeclaration{}
 	for _, tool := range reqData.Tools {
 		props := map[string]*genai.Schema{}
 		for name, prop := range tool.Function.Parameters.Properties {
@@ -113,17 +113,19 @@ func createGeminiToolSchema(reqData api.ChatRequest) []*genai.Tool {
 			Type:       genai.TypeObject,
 			Properties: props,
 		}
-		geminiTool := &genai.Tool{
-			FunctionDeclarations: []*genai.FunctionDeclaration{{
-				Name:        tool.Function.Name,
-				Description: tool.Function.Description,
-				Parameters:  parametersSchema,
-			}},
-		}
-		result = append(result, geminiTool)
+		geminiFunctions = append(geminiFunctions, &genai.FunctionDeclaration{
+			Name:        tool.Function.Name,
+			Description: tool.Function.Description,
+			Parameters:  parametersSchema,
+		})
 	}
-	v, _ := json.Marshal(result)
-	log.Infof("%v", string(v))
+
+	// For some strange reasons the gemini api accepts multiple tools, but then ever only
+	// works with the functions in the first tool. So, to make sure gemini works with all
+	// functions, we just pass all functions with the first tool.
+	result := []*genai.Tool{{FunctionDeclarations: geminiFunctions}}
+	//v, _ := json.Marshal(result)
+	//log.Infof("%v", string(v))
 	return result
 }
 
